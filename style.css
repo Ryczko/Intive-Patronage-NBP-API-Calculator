@@ -9,10 +9,21 @@
     background-color: white;
     border: 1px solid rgb(185, 185, 185);
     box-shadow: rgb(71, 71, 71) 0px 2px 2px 0px;
-    width:320px;
+    width:390px;
     padding: 15px;
     border-radius: 3px;
 }
+
+.operationWindow{
+height: 40px;
+line-height: 40px;
+font-size: 20px;
+width: 100%;
+text-align: right;
+border: 1px solid black;
+margin:10px;
+}
+
 .result{
     width: 100%;
     margin-bottom: 15px;
