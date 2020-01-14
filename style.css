@@ -4,6 +4,17 @@
     font-size: 20px;
     font-weight: bold;
 }
+.dropdown{
+    margin-bottom: 10px;
+}
+.dropdown>.btn,.dropdown>.btn:hover,.dropdown>.btn:focus {
+    width: 350px;
+  color: white; 
+}
+.currencyList{
+    height: 300px;
+    overflow: auto;
+}
 .container{
    
     background-color: white;

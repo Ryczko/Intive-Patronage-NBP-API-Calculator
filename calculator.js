@@ -8,11 +8,15 @@ let isSolved = false;
 let special = false;
 let root = false;
 
+let currencyWrite = false;
+
 let stringToView = "";
 
 const result = document.querySelector('.result');
 const operationWindow = document.querySelector('.operationWindow');
 const container = document.querySelector('.container');
+
+const currencyList = document.querySelector('.currencyList');
 
 container.onclick = function (event) {
     const classes = event.target.classList;
@@ -20,6 +24,48 @@ container.onclick = function (event) {
     else if (classes.contains("symbol")) getSymbol(event);
     else if (classes.contains("c")) clearAll();
     else if (classes.contains("ce")) clearNumber();
+}
+
+fetch("http://api.nbp.pl/api/exchangerates/tables/A/")
+    .then(resp => {
+        if (resp.ok) {
+            return resp.json()
+        } else {
+            throw new Error("Błąd wczytywania walut")
+        }
+    })
+    .then(resp => {
+        resp[0].rates.forEach(rate => {
+            const a = document.createElement('a');
+            let currency = rate.code;
+            let price = rate.mid;
+            a.addEventListener('click', function () {
+                addCurrency(currency, price)
+            })
+            a.className += "dropdown-item";
+            a.href = "#";
+            a.innerHTML = rate.currency;
+            currencyList.appendChild(a);
+        })
+    })
+
+
+//dodanie waluty
+function addCurrency(cur, pric) {
+    if (isSolved === true) clearAll();
+    if (currencyWrite) return;
+    if (actualNumber && actualNumber !== "-") {
+        operation += actualNumber + "*";
+        stringToView += "*"
+    }
+    if (actualNumber === "-") {
+        operation += actualNumber
+    }
+    stringToView += `${cur}()`;
+    actualNumber = ""
+    operation += `${pric}*`;
+    currencyWrite = true;
+    operationWindow.innerHTML = stringToView;
 }
 
 function clearNumber() {
@@ -43,6 +89,7 @@ function clearAll() {
     comma = false;
     isSolved = false;
     special = false;
+    currencyWrite = false;
     root = false;
     result.value = "";
     stringToView = "";
@@ -51,8 +98,8 @@ function clearAll() {
 
 //zwraca true gdy liczba otwartych nawiasów<=zamkniętych
 function checkBrackets() {
-    const numberOfOpenedBrackets = (stringToView + actualNumber).split("(").length - 1;
-    const numberOfClosedBrackets = (stringToView + actualNumber).split(")").length - 1;
+    const numberOfOpenedBrackets = (operation + actualNumber).split("(").length - 1;
+    const numberOfClosedBrackets = (operation + actualNumber).split(")").length - 1;
     const difference = numberOfOpenedBrackets - numberOfClosedBrackets;
     if (difference <= 0) return true;
     else return false;
@@ -60,10 +107,22 @@ function checkBrackets() {
 
 function write(e) {
     let val = e.target.textContent;
+    result.value = "";
     if (isSolved === true) clearAll();//kontynuacja działania po wyniku
-
     const lastSymb = actualNumber[actualNumber.length - 1];
     const isNotNumber = isNaN(lastSymb);
+
+    //wpisywanie wartości do miejsca na walute
+    if (currencyWrite) {
+        if (val === "(") return;
+        else if (val === ")") {
+            if (actualNumber === "") actualNumber = "1";
+            operation += actualNumber;
+            actualNumber = "";
+            currencyWrite = false;
+        }
+        else stringToView = stringToView.slice(0, stringToView.length - 1);
+    }
 
     //wpisanie stopnie pierwiastka
     if (root || special) {
@@ -73,7 +132,7 @@ function write(e) {
             if (val === "(") val = "*" + val;
             if (root) {
                 if (!actualNumber) actualNumber = "2";
-                operation += `1/${actualNumber})${val}`;
+                operation += `1 / ${actualNumber})${val}`;
             }
             else if (special) {
                 if (!actualNumber) actualNumber = "1";
@@ -81,9 +140,10 @@ function write(e) {
             }
             stringToView += val;
             operationWindow.innerHTML = stringToView;
-            clearNumber();
             special = false;
             root = false;
+            actualNumber = "";
+            comma = false;
             return;
         }
 
@@ -136,7 +196,8 @@ function write(e) {
     }
     //zamyknięcie nawiasu możliwe tylko w odpowiednich warunkach
     if (val === ")") {
-        if ((isNotNumber && actualNumber !== "") || (actualNumber === "" && operation[operation.length - 1] !== ")") || lastSymb === "." || checkBrackets() === true || (operation + actualNumber)[(operation + actualNumber).length - 1] === "(") return;
+        const lastOperationSymb = operation[operation.length - 1];
+        if ((isNotNumber && actualNumber !== "") || ((lastOperationSymb === "+" || lastOperationSymb === "-" || lastOperationSymb === "/" || lastOperationSymb === "*") && actualNumber === "") || lastSymb === "." || checkBrackets() === true || (operation + actualNumber)[(operation + actualNumber).length - 1] === "(") return;
         brackets(actualNumber, val)
         return;
     }
@@ -161,6 +222,7 @@ function write(e) {
         }
         comma = true;
     }
+    if (currencyWrite) stringToView += ")"
     operationWindow.innerHTML = stringToView;
 }
 
@@ -176,10 +238,26 @@ function getSymbol(e) {
         isSolved = false;
     }
 
+    if (currencyWrite) {
+
+        if (typeof (powerAndRoot) === undefined) return;
+        //przeliczy kurs waluty razy 1 gdy nie podano jej ilości
+        if (!actualNumber) actualNumber = "1";
+        if (stringToView[stringToView.length - 1] !== ")") stringToView += ")"
+        currencyWrite = false;
+        operation += actualNumber;
+        if (symbol === "=") return count();
+        operation += symbol;
+        stringToView += symbol;
+        actualNumber = "";
+        operationWindow.innerHTML = stringToView;
+        return
+    }
+
     //opcja pierwiastkowania i potęgowania wcześniej wpisanej wartości
-    if (powerAndRoot === "root" || powerAndRoot === "power") {
+    if ((powerAndRoot === "root" || powerAndRoot === "power")) {
         if (special === true || root === true || actualNumber === "" || !isNaN(operation[operation.length - 1])) return;
-        operation += `Math.pow(${actualNumber},`;
+        operation += `Math.pow(${actualNumber}, `;
         if (powerAndRoot === "root") {
             stringToView = stringToView.slice(0, stringToView.length - actualNumber.length)
             stringToView += "√" + actualNumber;
@@ -191,11 +269,10 @@ function getSymbol(e) {
         return;
     }
 
-
     //koniec pisania stopnia pierwiastka
     if (root) {
         if (actualNumber === "") actualNumber = "2";
-        operation += `1/${actualNumber})`;
+        operation += `1 / ${actualNumber})`;
         actualNumber = "";
         special = false;
         root = false;
@@ -251,11 +328,7 @@ function count() {
     }
 
     //zamykanie niezamkniętych nawiasów
-    while (checkBrackets() === false) {
-        operation += ')';
-        stringToView += ')';
-    }
-    operationWindow.innerHTML = stringToView;
+    while (checkBrackets() === false) operation += ')';
 
     //obliczanie
     try {
@@ -268,14 +341,15 @@ function count() {
         return;
     }
     //błąd dzielenia przez 0
-    if ((operation === Infinity || operation === -Infinity)) {
+    if (operation === "Infinity" || operation === "-Infinity") {
         clearAll();
         result.value = "Nie dziel przez 0";
+        return
     }
     else if (operation === "NaN") {
         clearAll();
         result.value = "błąd";
-
+        return
     }
     else result.value = operation;
     actualNumber = operation;
