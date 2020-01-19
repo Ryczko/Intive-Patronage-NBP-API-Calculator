@@ -9,13 +9,11 @@ let special = false;
 let root = false;
 
 let currencyWrite = false;
-
 let stringToView = "";
 
 const result = document.querySelector('.result');
 const operationWindow = document.querySelector('.operationWindow');
 const container = document.querySelector('.container');
-
 const currencyList = document.querySelector('.currencyList');
 
 container.onclick = function (event) {
@@ -49,7 +47,6 @@ fetch("http://api.nbp.pl/api/exchangerates/tables/A/")
         })
     })
 
-
 //dodanie waluty
 function addCurrency(cur, pric) {
     if (isSolved === true) clearAll();
@@ -58,26 +55,36 @@ function addCurrency(cur, pric) {
         operation += actualNumber + "*";
         stringToView += "*"
     }
-    if (actualNumber === "-") {
-        operation += actualNumber
-    }
+    if (actualNumber === "-") operation += actualNumber
     stringToView += `${cur}()`;
     actualNumber = ""
     operation += `${pric}*`;
     currencyWrite = true;
+    comma = false;
     operationWindow.innerHTML = stringToView;
 }
 
+//usuwanie ostatniego znaku/ znaku operacji
 function clearNumber() {
-    //brak możliwości zmiany stopnie pierwiastka
-    if (root) return;
+    const lastOperationSymb = operation[operation.length - 1]
+    if ((!actualNumber && !isNaN(lastOperationSymb)) || special || (lastOperationSymb === ")" && stringToView[stringToView.length - 1] !== ")") || (currencyWrite && !actualNumber)) return;//maksymalnie można cofnąć jedną liczbę i znaki
+    if (currencyWrite) stringToView = stringToView.slice(0, stringToView.length - 1);
+    if (actualNumber) {
+        actualNumber = actualNumber.slice(0, actualNumber.length - 1);
+        if (!actualNumber.includes(".")) comma = false;
+    }
+    else {
+        operation = operation.slice(0, operation.length - 1);
+        comma = true;
+    }
+    stringToView = stringToView.slice(0, stringToView.length - 1);
+    if (currencyWrite) stringToView += ")"
+    operationWindow.innerHTML = stringToView;
+}
+
+function add() {
     const len = actualNumber.length;
     stringToView = stringToView.slice(0, ((stringToView.length) - len));
-    //zmiana wykładnika
-    if (special && actualNumber !== "") {
-        //11*len- długość tagu <sup>n</sup>
-        stringToView = stringToView.slice(0, ((stringToView.length) - 11 * len))
-    }
     actualNumber = "";
     comma = false;
 }
@@ -97,98 +104,104 @@ function clearAll() {
 }
 
 //zwraca true gdy liczba otwartych nawiasów<=zamkniętych
-function checkBrackets() {
-    const numberOfOpenedBrackets = (operation + actualNumber).split("(").length - 1;
-    const numberOfClosedBrackets = (operation + actualNumber).split(")").length - 1;
-    const difference = numberOfOpenedBrackets - numberOfClosedBrackets;
-    if (difference <= 0) return true;
+function checkBrackets(where) {
+    const numberOfOpenedBrackets = (where + actualNumber).split("(").length - 1;
+    const numberOfClosedBrackets = (where + actualNumber).split(")").length - 1;
+    if (numberOfOpenedBrackets === numberOfClosedBrackets) return true;
     else return false;
 }
 
+//wpisywanie wartości do miejsca na walute
+function getCurrencyAmount(val) {
+    if (val === "(") return;
+    else if (val === ")") {
+        if (actualNumber === "") actualNumber = "1";
+        operation += actualNumber;
+        actualNumber = "";
+        currencyWrite = false;
+    }
+    else stringToView = stringToView.slice(0, stringToView.length - 1);
+}
+
+//poprawne działanie przecinków
+function putNumber(val) {
+    if (!actualNumber && val !== ",") actualNumber = val;
+    else if (val !== ",") actualNumber += val;
+    else if (val === ",") {
+        if (['', '-', '(', '(-'].includes(actualNumber)) {
+            actualNumber += "0.";
+            val = "0.";
+        }
+        else {
+            actualNumber += ".";
+            val = "."
+        }
+        comma = true;
+    }
+    return val;
+}
+
+//wpisanie stopnia pierwiastku/potęgi
+function insertElementalDegree(val) {
+    if (val === ")" || val === "(") {
+        if (val === "(") val = "*" + val;
+        if (root) {
+            if (!actualNumber) actualNumber = "2";
+            operation += `1 / ${actualNumber})${val}`;
+        }
+        else if (special) {
+            if (!actualNumber) actualNumber = "1";
+            operation += `${actualNumber})${val}`;
+        }
+        stringToView += val;
+        special = false;
+        root = false;
+        actualNumber = "";
+        comma = false;
+    }
+    if (!isNaN(val) || (val === ",")) val = putNumber(val);
+    if (special && !root) stringToView += val.sup();
+    if (root) {
+        const rootIndex = stringToView.lastIndexOf("√");
+        stringToView = stringToView.slice(0, rootIndex) + val.sup() + stringToView.slice(rootIndex);
+    }
+    operationWindow.innerHTML = stringToView
+}
+
+//dodanie nawaisów, i ew znaku mnożenia
+function brackets(acN, val, symb = "") {
+    operation += acN + symb + val
+    add()
+    stringToView += acN + symb + val
+    operationWindow.innerHTML = stringToView;
+}
+//główna funkcja wpisywania liczb i nawiasów
 function write(e) {
     let val = e.target.textContent;
-    result.value = "";
-    if (isSolved === true) clearAll();//kontynuacja działania po wyniku
+    if (isSolved === true && val !== ")") clearAll();//kontynuacja działania po wyniku
     const lastSymb = actualNumber[actualNumber.length - 1];
     const isNotNumber = isNaN(lastSymb);
+    const lastOperationSymb = operation[operation.length - 1];
+    if (val === ")" && checkBrackets(stringToView) === true) return;
+    if (val === "," && comma === true) return;
+    if (currencyWrite) getCurrencyAmount(val);
 
-    //wpisywanie wartości do miejsca na walute
-    if (currencyWrite) {
-        if (val === "(") return;
-        else if (val === ")") {
-            if (actualNumber === "") actualNumber = "1";
-            operation += actualNumber;
-            actualNumber = "";
-            currencyWrite = false;
-        }
-        else stringToView = stringToView.slice(0, stringToView.length - 1);
-    }
-
-    //wpisanie stopnie pierwiastka
     if (root || special) {
-        if (val === ")" || val === "(") {
-
-            if (val === ")" && checkBrackets() === true) return;
-            if (val === "(") val = "*" + val;
-            if (root) {
-                if (!actualNumber) actualNumber = "2";
-                operation += `1 / ${actualNumber})${val}`;
-            }
-            else if (special) {
-                if (!actualNumber) actualNumber = "1";
-                operation += `${actualNumber})${val}`;
-            }
-            stringToView += val;
-            operationWindow.innerHTML = stringToView;
-            special = false;
-            root = false;
-            actualNumber = "";
-            comma = false;
-            return;
-        }
-
-        if (!isNaN(val) || (val === ",")) {
-            if (!actualNumber && val !== ",") actualNumber = val;
-            else if (val !== ",") actualNumber += val;
-            else if (comma) return;
-            else if (comma === false) {
-                if (!actualNumber || actualNumber === "-" || actualNumber === "(" || actualNumber === "(-") actualNumber += "0.";
-                else actualNumber += ".";
-                comma = true;
-            }
-            if (special && !root) {
-                stringToView += actualNumber[actualNumber.length - 1].sup();
-                operationWindow.innerHTML = stringToView;
-                return;
-            }
-        }
-        if (root) {
-            const rootIndex = stringToView.lastIndexOf("√");
-            stringToView = stringToView.slice(0, rootIndex) + actualNumber[actualNumber.length - 1].sup() + stringToView.slice(rootIndex);
-            operationWindow.innerHTML = stringToView
-            return;
-        }
-    }
-
-    //dodanie nawaisów, i ew znaku mnożenia
-    function brackets(acN, val, symb = "") {
-        operation += acN + symb + val
-        clearNumber();
-        stringToView += acN + symb + val
-        operationWindow.innerHTML = stringToView;
+        insertElementalDegree(val)
+        return;
     }
 
     if (val === "(") {
         if (actualNumber[actualNumber.length - 1] === ".") return;
         //dodanie znaku mnożenia, gdy przed, lub za nawiasem nie wybrano operatora
-        if (!isNotNumber || operation[operation.length - 1] === ")") {
+        if (!isNotNumber || lastOperationSymb === ")") {
             brackets(actualNumber, val, "*")
             return
         }
         brackets(actualNumber, val);
         return
     }
-    if (operation[operation.length - 1] === ")" && val !== ")" && val !== "(") {
+    if (lastOperationSymb === ")" && val !== ")" && val !== "(") {
         operation += "*";
         comma = false;
         stringToView += "*"
@@ -196,32 +209,13 @@ function write(e) {
     }
     //zamyknięcie nawiasu możliwe tylko w odpowiednich warunkach
     if (val === ")") {
-        const lastOperationSymb = operation[operation.length - 1];
-        if ((isNotNumber && actualNumber !== "") || ((lastOperationSymb === "+" || lastOperationSymb === "-" || lastOperationSymb === "/" || lastOperationSymb === "*") && actualNumber === "") || lastSymb === "." || checkBrackets() === true || (operation + actualNumber)[(operation + actualNumber).length - 1] === "(") return;
+        //sprawdzenie, czy ostatni nie jest symbol, taki jak w tablicy
+        if ((['+', '-', '/', '*', '('].includes(lastOperationSymb) && !actualNumber) || lastSymb === ".") return;
         brackets(actualNumber, val)
         return;
     }
-
-    //poprawne działanie przecinków
-    if (!actualNumber && val !== ",") {
-        actualNumber = val;
-        stringToView += val
-    }
-    else if (val !== ",") {
-        actualNumber += val;
-        stringToView += actualNumber[actualNumber.length - 1];
-    }
-    else if (comma === false) {
-        if (!actualNumber || actualNumber === "-" || actualNumber === "(" || actualNumber === "(-") {
-            actualNumber += "0.";
-            stringToView += "0."
-        }
-        else {
-            actualNumber += ".";
-            stringToView += "."
-        }
-        comma = true;
-    }
+    val = putNumber(val);
+    stringToView += val
     if (currencyWrite) stringToView += ")"
     operationWindow.innerHTML = stringToView;
 }
@@ -230,16 +224,16 @@ function getSymbol(e) {
     symbol = e.target.textContent;
     comma = false;
     const powerAndRoot = e.target.dataset.special;
-
+    const lastSymb = operation[operation.length - 1];
     if (isSolved) {
         stringToView = actualNumber;
-        operationWindow.innerHTML = stringToView;
         result.value = "";
         isSolved = false;
     }
+    if (['.', '-'].includes(actualNumber[actualNumber.length - 1]) && symbol !== "=") return;
 
+    //przeliczenie waluty
     if (currencyWrite) {
-
         if (typeof (powerAndRoot) === undefined) return;
         //przeliczy kurs waluty razy 1 gdy nie podano jej ilości
         if (!actualNumber) actualNumber = "1";
@@ -251,15 +245,15 @@ function getSymbol(e) {
         stringToView += symbol;
         actualNumber = "";
         operationWindow.innerHTML = stringToView;
-        return
+        return;
     }
 
     //opcja pierwiastkowania i potęgowania wcześniej wpisanej wartości
     if ((powerAndRoot === "root" || powerAndRoot === "power")) {
-        if (special === true || root === true || actualNumber === "" || !isNaN(operation[operation.length - 1])) return;
+        if (special === true || root === true || !actualNumber || !isNaN(lastSymb)) return;
         operation += `Math.pow(${actualNumber}, `;
         if (powerAndRoot === "root") {
-            stringToView = stringToView.slice(0, stringToView.length - actualNumber.length)
+            stringToView = stringToView.slice(0, stringToView.length - actualNumber.length);
             stringToView += "√" + actualNumber;
             operationWindow.innerHTML = stringToView;
             root = true;
@@ -268,7 +262,6 @@ function getSymbol(e) {
         actualNumber = "";
         return;
     }
-
     //koniec pisania stopnia pierwiastka
     if (root) {
         if (actualNumber === "") actualNumber = "2";
@@ -277,7 +270,6 @@ function getSymbol(e) {
         special = false;
         root = false;
     }
-
     //koniec pisania wykładnika
     if (special) {
         if (actualNumber === "") actualNumber = "1";
@@ -285,25 +277,21 @@ function getSymbol(e) {
         actualNumber = "";
         special = false;
     }
-
     //wpisywanie misusa jako pierwszego, lub po otwarciu nawiasu
-    if (symbol === "-" && (operation[operation.length - 1] === "(" || operation === "" || special === true) && actualNumber === "") {
+    if (symbol === "-" && (lastSymb === "(" || !operation) && !actualNumber) {
         actualNumber = symbol;
         stringToView += actualNumber
         operationWindow.innerHTML = stringToView;
         return;
     }
 
-    if (operation === "" && actualNumber !== "-" && actualNumber[actualNumber.length - 1] !== "." && actualNumber !== "(") operation = actualNumber;//pierwsza wpisywana liczba
-    else if (actualNumber !== "(" && actualNumber[actualNumber.length - 1] !== "." && actualNumber !== "(-" && actualNumber !== "-") operation += actualNumber;//kolejne liczby
+    if (!operation) operation = actualNumber;//pierwsza wpisywana liczba
+    else operation += actualNumber;//kolejne liczby
 
     if (symbol === "=") return count();
 
-    const lastSymb = operation[operation.length - 1];
-    const lastActualNumber = actualNumber[actualNumber.length - 1];
-
-    if (operation === "" || operation === "-" || lastActualNumber === "-" || lastSymb === "(" || actualNumber === "(-" || lastActualNumber === ".") return;//blok po minusie
-    else if (lastSymb === "+" || lastSymb === "-" || lastSymb === "/" || lastSymb === "*") {
+    if (!operation || (lastSymb === "(" && !actualNumber)) return;//blok po minusie
+    else if (['+', '-', '/', '*'].includes(lastSymb) && !actualNumber) {
         operation = operation.slice(0, operation.length - 1) + symbol;//możliwość zmiany znaku
         stringToView = stringToView.slice(0, stringToView.length - 1) + symbol;
     }
@@ -317,39 +305,36 @@ function getSymbol(e) {
 
 function count() {
     stringToView += actualNumber;
-    clearNumber();
-
+    add();
     //usuwanie operatora na końcu, gdy nie wpisano liczby
     let lastSymb = operation[operation.length - 1];
-    while (lastSymb === "+" || lastSymb === "-" || lastSymb === "/" || lastSymb === "*" || lastSymb === "(") {
+    while (['+', '-', '/', '*', '(', '.'].includes(lastSymb)) {
         operation = operation.slice(0, operation.length - 1);
         stringToView = stringToView.slice(0, stringToView.length - 1)
         lastSymb = operation[operation.length - 1];
     }
-
     //zamykanie niezamkniętych nawiasów
-    while (checkBrackets() === false) operation += ')';
-
+    while (!checkBrackets(operation)) operation += ')';
+    while (!checkBrackets(stringToView)) stringToView += ')';
+    operationWindow.innerHTML = stringToView;
     //obliczanie
     try {
-        operation = (operation === "") ? "0" : round(eval(operation), 14);
+        operation = (!operation) ? "0" : round(eval(operation), 14);
         operation = operation.toString();
     }
     catch (e) {
         clearAll();
+        isSolved = true
         result.value = "błąd";
         return;
     }
     //błąd dzielenia przez 0
-    if (operation === "Infinity" || operation === "-Infinity") {
+    if (operation === "Infinity" || operation === "-Infinity" || operation === 'NaN') {
         clearAll();
+        isSolved = true
         result.value = "Nie dziel przez 0";
-        return
-    }
-    else if (operation === "NaN") {
-        clearAll();
-        result.value = "błąd";
-        return
+        if (operation === 'NaN') result.value = "błąd";
+        return;
     }
     else result.value = operation;
     actualNumber = operation;
