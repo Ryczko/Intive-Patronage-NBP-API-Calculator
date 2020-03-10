@@ -24,7 +24,7 @@ container.onclick = function (event) {
     else if (classes.contains("ce")) clearNumber();
 }
 
-fetch("http://api.nbp.pl/api/exchangerates/tables/A/")
+fetch("https://api.nbp.pl/api/exchangerates/tables/A/")
     .then(resp => {
         if (resp.ok) {
             return resp.json()
